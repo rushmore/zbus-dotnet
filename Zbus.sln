@@ -1,0 +1,34 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio 14
+VisualStudioVersion = 14.0.25420.1
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zbus", "Zbus\Zbus.csproj", "{06799F8A-6BD4-4F50-BB30-2893F057E07D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zbus.Examples", "Zbus.Examples\Zbus.Examples.csproj", "{2EEF7064-11AE-4DB1-A800-E28F532F2732}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zbus.Test", "Zbus.Test\Zbus.Test.csproj", "{D40B57FA-4DCB-431F-8C4A-148FD335935B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{06799F8A-6BD4-4F50-BB30-2893F057E07D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{06799F8A-6BD4-4F50-BB30-2893F057E07D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{06799F8A-6BD4-4F50-BB30-2893F057E07D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{06799F8A-6BD4-4F50-BB30-2893F057E07D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2EEF7064-11AE-4DB1-A800-E28F532F2732}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2EEF7064-11AE-4DB1-A800-E28F532F2732}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2EEF7064-11AE-4DB1-A800-E28F532F2732}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2EEF7064-11AE-4DB1-A800-E28F532F2732}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D40B57FA-4DCB-431F-8C4A-148FD335935B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D40B57FA-4DCB-431F-8C4A-148FD335935B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D40B57FA-4DCB-431F-8C4A-148FD335935B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D40B57FA-4DCB-431F-8C4A-148FD335935B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
