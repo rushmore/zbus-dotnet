@@ -8,8 +8,7 @@ namespace Zbus.Examples
     {
         static async Task Test()
         {
-            Broker broker = new Broker();
-            broker.AddTracker("localhost:15555");
+            Broker broker = new Broker("localhost:15555");
 
             MqAdmin admin = new MqAdmin(broker);
             await admin.DeclareTopicAsync("hong8");

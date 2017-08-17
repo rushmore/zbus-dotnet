@@ -42,6 +42,7 @@ namespace Zbus.Mq
                     return pool.Create();
                 },  
             };
+            thread.ConnectionCount = ConnectionCount.HasValue? ConnectionCount.Value : 1; 
             thread.MessageRecevied += (msg, client) =>  MessageHandler?.Invoke(msg, client); 
 
             consumeThreadTable[serverAddress] = thread;

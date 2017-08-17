@@ -20,7 +20,7 @@ namespace Zbus.Examples
 
             Console.WriteLine($"request: {msg.Id}");
             Message res = await client.InvokeAsync(msg, token);
-            Console.WriteLine($"response: {msg}");
+            Console.WriteLine($"response: {res}");
         }
 
         static void Main(string[] args)

@@ -1,4 +1,5 @@
-﻿using System;
+﻿using log4net;
+using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
@@ -52,7 +53,7 @@ namespace Zbus.Mq.Net
         {
             if (msg.Status != null)
             {
-                string desc = "Unknow status";
+                string desc = "Unknown status";
                 if (HttpStatusTable.ContainsKey(msg.Status.Value))
                 {
                     desc = HttpStatusTable[msg.Status.Value];
@@ -73,17 +74,15 @@ namespace Zbus.Mq.Net
                 }
                 buf.Put("{0} {1} HTTP/1.1\r\n", method, url);
             }
+            string lenKey = "content-length";
             foreach (KeyValuePair<string, string> e in msg.Headers)
             {
+                if (e.Key.ToLower() == lenKey) continue; //content-length ignore, should be decided by body
                 buf.Put("{0}: {1}\r\n", e.Key, e.Value);
             }
-            string lenKey = "content-length";
-            if (!msg.Headers.ContainsKey(lenKey))
-            {
-                int bodyLen = msg.Body == null ? 0 : msg.Body.Length;
-                buf.Put("{0}: {1}\r\n", lenKey, bodyLen);
-            }
-
+            
+            int bodyLen = msg.Body == null ? 0 : msg.Body.Length;
+            buf.Put("{0}: {1}\r\n", lenKey, bodyLen);  
             buf.Put("\r\n");
 
             if (msg.Body != null)
@@ -165,6 +164,7 @@ namespace Zbus.Mq.Net
 
     public class MessageClient : Client<Message>
     {
+        private static readonly ILog log = LogManager.GetLogger(typeof(MessageClient));
         public MessageClient(string serverAddress)
             : base(serverAddress, new MessageCodec())
         {
@@ -172,6 +172,14 @@ namespace Zbus.Mq.Net
         public MessageClient(ServerAddress serverAddress, string certFile = null)
             : base(serverAddress, new MessageCodec(), certFile)
         {
+        }
+
+        protected override async Task DoHeartbeat()
+        {
+            log.Debug("Sending heartbeat...");
+            Message msg = new Message();
+            msg.Cmd = Protocol.HEARTBEAT;
+            await this.SendAsync(msg);
         }
     } 
 }

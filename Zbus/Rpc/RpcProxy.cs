@@ -22,17 +22,30 @@ namespace Zbus.Rpc
             return (T)GetTransparentProxy();
         }
 
-        protected Response Invoke(Type realReturnType, Request request)
+        public dynamic Request(Type realReturnType, Request request)
         {
-            Response res = rpcInvoker.InvokeAsync(request).Result; 
-            if (res.Result == null) return res;
-            if (realReturnType == typeof(void)) return res;
-
-            if (realReturnType != res.Result.GetType() && !typeof(Task).IsAssignableFrom(realReturnType))
+            Response resp = rpcInvoker.InvokeAsync(request).Result;
+            if (resp.Error != null)
             {
-                res.Result = JsonKit.Convert(res.Result, realReturnType);
+                Exception error = null;
+                if (resp.Error is Exception)
+                {
+                    error = resp.Error as Exception;
+                }
+                else
+                {
+                    error = new RpcException(resp.Error.ToString());
+                }
+                return error;
             }
-            return res;
+            if (resp.Result == null) return null;
+            if (realReturnType == typeof(void)) return null;
+
+            if (realReturnType != resp.Result.GetType() && !typeof(Task).IsAssignableFrom(realReturnType))
+            {
+                return JsonKit.Convert(resp.Result, realReturnType);
+            }
+            return resp.Result;
         }  
 
         public override IMessage Invoke(IMessage msg)
@@ -66,22 +79,12 @@ namespace Zbus.Rpc
                 //Simple methods
                 if (!typeof(Task).IsAssignableFrom(returnType))
                 {
-                    Response resp = Invoke(returnType, req);
-
-                    if (resp.Error != null)
+                    dynamic res = Request(returnType, req);
+                    if(res != null && res is Exception)
                     {
-                        Exception error = null;
-                        if (resp.Error is Exception)
-                        {
-                            error = (Exception)resp.Error;
-                        }
-                        else
-                        {
-                            error = new RpcException(resp.Error.ToString());
-                        } 
-                        return new ReturnMessage(error, methodCall);
-                    }
-                    return new ReturnMessage(resp.Result, null, 0, methodCall.LogicalCallContext, methodCall);
+                        return new ReturnMessage(res as Exception, methodCall);
+                    } 
+                    return new ReturnMessage(res, null, 0, methodCall.LogicalCallContext, methodCall);
                 }
 
                 //Task returned method 
@@ -96,7 +99,7 @@ namespace Zbus.Rpc
                 {
                     task = Task.Run(() =>
                     {
-                        Invoke(realType, req);
+                        Request(realType, req);
                     });
                 }
                 else

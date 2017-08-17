@@ -64,6 +64,8 @@ namespace Zbus.Mq
         public static readonly int MASK_RPC = 1 << 1;
         public static readonly int MASK_EXCLUSIVE = 1 << 2;
         public static readonly int MASK_DELETE_ON_EXIT = 1 << 3;
+
+        public static readonly string HEARTBEAT = "heartbeat";
     } 
 
     public class ServerAddress

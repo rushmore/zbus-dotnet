@@ -8,19 +8,13 @@ namespace Zbus.Examples
 {
     class RpcInvokerExample
     {
-        static async Task Test(IService svc)
+        static async Task Test()
         {
-            int res = await svc.PlusAsync(1, 2);  //support Async keywords
-            Console.WriteLine(res);
-        }
-
-        static void Main(string[] args)
-        { 
-            using (Broker broker = new Broker("localhost:15555"))
+            using (Broker broker = new Broker("localhost:15555;localhost:15556"))
             {
-                RpcInvoker rpc = new RpcInvoker(broker, "MyRpc"); 
+                RpcInvoker rpc = new RpcInvoker(broker, "MyRpc");
                 //Way 1) Raw invocation
-                var res = rpc.InvokeAsync<int>("plus", 1, 2).Result;
+                var res = await rpc.InvokeAsync<int>("plus", 1, 2);
                 Console.WriteLine(res);
 
                 //Way 2) Dynamic Object
@@ -29,12 +23,19 @@ namespace Zbus.Examples
                 Console.WriteLine(res2);
 
                 //Way 3) Strong typed class proxy
-                IService svc = rpc.CreateProxy<IService>();  //Create a proxy class, strongly invocation
+                IService svc = rpc.CreateProxy<IService>();  //Create a proxy class, strong-typed invocation
 
                 var res3 = svc.plus(1, 2);
                 Console.WriteLine(res3);
-            }
 
+                var res4 = await svc.getString("hello");        //support Task returned type
+                Console.WriteLine(res4);
+            }  
+        }
+
+        static void Main(string[] args)
+        { 
+            Test().Wait();
             Console.WriteLine("done");
             Console.ReadKey();
         }

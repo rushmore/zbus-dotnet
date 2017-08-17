@@ -13,14 +13,15 @@ namespace Zbus.Examples
             RpcProcessor p = new RpcProcessor();
             p.AddModule<MyService>(); //Simple?
 
-
-            Broker broker = new Broker("localhost:15555"); //Capable of HA failover, test it! 
+            Broker broker = new Broker("localhost:15555");
+            //Broker broker = new Broker("localhost:15555;localhost15556"); //Capable of HA failover, test it! 
 
             Consumer c = new Consumer(broker, "MyRpc");
-            c.ConnectionCount = 2; 
+            c.ConnectionCount = 4; 
             c.MessageHandler = p.MessageHandler; //Set processor as message handler
             c.Start();
-            Console.WriteLine("Rpc Service Ready");
+            Console.WriteLine("MyRpc Service Ready");
+            //Console.ReadKey();
         }
     }
 }

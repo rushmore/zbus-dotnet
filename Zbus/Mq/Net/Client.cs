@@ -25,11 +25,34 @@ namespace Zbus.Mq.Net
         string Id { get; set; }
     }
 
-
+    /// <summary>
+    /// TCP client, capable of send/recv message, and message codec is plugable,
+    /// SendAsync/RecvAsync/InvokeAsync all conform to C# async api.
+    /// 
+    /// Client no need to connect explicitly, it is called internally by methods like SendXxx/RecvXxx/InokeXxx
+    /// 
+    /// Client works in 2 different scenarios: 
+    /// 1) Auto matching, SendAsync/RecvAsync/InvokeAsync with message matched by ID
+    /// 2) Daemon, Start a thread, monitor message by MessageReceived + SendAsync
+    /// 
+    /// Heartbeat:
+    /// By default a created Client starts one thread to do hearbeat every configurable interval of time,
+    /// and the default heartbeat interval is 30 seconds, which of course should be less than the server's
+    /// idle checking time, for example zbus is configured by default to be 60 seconds idle checking.
+    /// 
+    /// Thread safety:
+    /// All public methods are thread safe.
+    /// 
+    /// </summary>
+    /// <typeparam name="REQ">Request message type</typeparam>
+    /// <typeparam name="RES">Response message type</typeparam>
     public class Client<REQ, RES> : IDisposable where REQ : Id where RES : Id
     {
         private static readonly ILog log = LogManager.GetLogger(typeof(Client<REQ, RES>));
         public bool AllowSelfSignedCertficate { get; set; }
+        public int HeartbeatInterval { get; set; } = 60000; //1 minute
+        public int RetryInterval { get; set; } = 3000; //3 seconds by default to retry if in disconnected.
+
         private ICodec codecRead;
         private ICodec codecWrite;
 
@@ -41,7 +64,9 @@ namespace Zbus.Mq.Net
 
         private TcpClient tcpClient;
         private Stream stream;
-        private SemaphoreSlim locker = new SemaphoreSlim(1);
+        private SemaphoreSlim connectLocker = new SemaphoreSlim(1);
+        private SemaphoreSlim readLocker = new SemaphoreSlim(1);
+        private SemaphoreSlim writeLocker = new SemaphoreSlim(1);
 
         public Client(ServerAddress serverAddress, ICodec codecRead, ICodec codecWrite, string certFile = null)
         {
@@ -49,6 +74,8 @@ namespace Zbus.Mq.Net
             this.codecRead = codecRead;
             this.codecWrite = codecWrite;
             this.certFile = certFile;
+
+            this.StartHeartbeat();
         }
         public Client(string serverAddress, ICodec codecRead, ICodec codecWrite) :
             this(new ServerAddress(serverAddress), codecRead, codecWrite)
@@ -65,13 +92,13 @@ namespace Zbus.Mq.Net
             if (Active) return;
             try
             {
-                await locker.WaitAsync(); 
+                await connectLocker.WaitAsync(); 
                 if (Active) return;
                 await ConnectUnsafeAsync();
             }
             finally
             {
-                locker.Release();
+                connectLocker.Release();
             }
             //If no error connected event triggered
             Connected?.Invoke(); 
@@ -83,30 +110,22 @@ namespace Zbus.Mq.Net
             {
                 await ConnectAsync();
             }
-            try
-            {
-                await locker.WaitAsync();
 
-                await SendUnsafeAsync(req, token);
-                string reqId = req.Id;
-                RES res;
-                while (true)
+            await SendAsync(req, token);
+            string reqId = req.Id;
+            RES res;
+            while (true)
+            {
+                if (resultTable.ContainsKey(reqId))
                 {
-                    if (resultTable.ContainsKey(reqId))
-                    {
-                        res = resultTable[reqId];
-                        resultTable.Remove(reqId);
-                        return res;
-                    }
-
-                    res = await RecvUnsafeAsync(token);
-                    if (res.Id == reqId) return res; 
-                    resultTable[res.Id] = res;
+                    res = resultTable[reqId];
+                    resultTable.Remove(reqId);
+                    return res;
                 }
-            }
-            finally
-            {
-                locker.Release();
+
+                res = await RecvAsync(token);
+                if (res.Id == reqId) return res; 
+                resultTable[res.Id] = res;
             } 
         }
 
@@ -118,12 +137,12 @@ namespace Zbus.Mq.Net
             }
             try
             {
-                await locker.WaitAsync(); 
+                await writeLocker.WaitAsync(); 
                 await SendUnsafeAsync(req, token);
             }
             finally
             {
-                locker.Release();
+                writeLocker.Release();
             }
         }
         public async Task<RES> RecvAsync(CancellationToken? token = null)
@@ -134,16 +153,16 @@ namespace Zbus.Mq.Net
             }
             try
             {
-                await locker.WaitAsync();
+                await readLocker.WaitAsync();
                 return await RecvUnsafeAsync(token); 
             }
             finally
             {
-                locker.Release();
+                readLocker.Release();
             }
         }
 
-        private async Task ConnectUnsafeAsync()
+        protected async Task ConnectUnsafeAsync()
         {
             if (Active) return;
             string[] bb = this.serverAddress.Address.Trim().Split(':');
@@ -172,7 +191,7 @@ namespace Zbus.Mq.Net
                 {
                     throw new ArgumentException("Missing certificate file");
                 }
-                X509Certificate cert = X509Certificate.CreateFromCertFile(this.certFile);
+                X509Certificate.CreateFromCertFile(this.certFile);
                 SslStream sslStream = new SslStream(this.stream, false,
                     new RemoteCertificateValidationCallback((object sender, X509Certificate certificate, X509Chain chain, SslPolicyErrors sslPolicyErrors) =>
                     {
@@ -191,7 +210,7 @@ namespace Zbus.Mq.Net
             }
         }
 
-        private async Task SendUnsafeAsync(REQ req, CancellationToken? token = null)
+        protected async Task SendUnsafeAsync(REQ req, CancellationToken? token = null)
         { 
             if (token == null)
             {
@@ -200,18 +219,14 @@ namespace Zbus.Mq.Net
             if (req.Id == null)
             {
                 req.Id = Guid.NewGuid().ToString();
-            }
-            if (log.IsDebugEnabled)
-            {
-                log.Debug("Sending:\n" + req);
             } 
             ByteBuffer buf = this.codecWrite.Encode(req);
             await stream.WriteAsync(buf.Data, 0, buf.Limit, token.Value).ConfigureAwait(false);
             await stream.FlushAsync(token.Value).ConfigureAwait(false);
-        } 
+        }
 
 
-        private async Task<RES> RecvUnsafeAsync(CancellationToken? token = null)
+        protected async Task<RES> RecvUnsafeAsync(CancellationToken? token = null)
         { 
             if (token == null)
             {
@@ -226,11 +241,7 @@ namespace Zbus.Mq.Net
                 if (msg != null)
                 {
                     this.readBuf.Move(tempBuf.Position);
-                    RES res = (RES)msg; 
-                    if (log.IsDebugEnabled)
-                    {
-                        log.Debug("Recevied:\n" + res);
-                    }
+                    RES res = (RES)msg;  
                     return res;
                 }
                 int n = await stream.ReadAsync(buf, 0, buf.Length, token.Value).ConfigureAwait(false);
@@ -243,7 +254,13 @@ namespace Zbus.Mq.Net
         } 
 
         public void Dispose()
-        { 
+        {
+            this.cts.Cancel();
+            CloseConnection();
+        }
+
+        private void CloseConnection()
+        {
             if (stream != null)
             {
                 stream.Close();
@@ -251,7 +268,7 @@ namespace Zbus.Mq.Net
             if (this.tcpClient != null)
             {
                 this.tcpClient.Close();
-            }
+            } 
         }
 
         public bool Active
@@ -262,48 +279,82 @@ namespace Zbus.Mq.Net
             }
         }
 
+        #region Heartbeat 
+        protected virtual async Task DoHeartbeat()
+        {
+            log.Debug("Sending heartbeat...");
+            await Task.FromResult(false);
+        }
+
+        private Thread heartbeatThread;
+        public void StartHeartbeat()
+        {
+            if (this.heartbeatThread != null) return;
+            lock (this)
+            {
+                if (this.heartbeatThread != null) return;
+
+                this.heartbeatThread = new Thread( async () =>
+                {
+                    while (!cts.IsCancellationRequested)
+                    {
+                        await Task.Delay(this.HeartbeatInterval);
+                        try
+                        {
+                            if (this.Active)
+                            {
+                                await DoHeartbeat();
+                            } 
+                        }
+                        catch
+                        {
+                            //ignore
+                        } 
+                    }
+                });
+                this.heartbeatThread.Start();
+            }
+        }
+        #endregion
+
         public event Action Connected;
         public event Action Disconnected;
         public event Action<RES> MessageReceived;
-        private Thread recvThread;
-        private CancellationTokenSource cts = new CancellationTokenSource();
+        private Thread recvThread; 
+        private CancellationTokenSource cts = new CancellationTokenSource();  
 
         public void Start()
         {
+            if (this.recvThread != null) return;
             lock (this)
             {
                 if (this.recvThread != null) return;
-            }
 
-            this.recvThread = new Thread(async () =>
-            {  
-                while (!cts.IsCancellationRequested)
+                this.recvThread = new Thread(async () =>
                 {
-                    try
-                    { 
-                        RES res = await RecvAsync(cts.Token);
-                        MessageReceived?.Invoke(res);
-                    }
-                    catch (Exception e)
+                    while (!cts.IsCancellationRequested)
                     {
-                        if (e is SocketException || e is IOException)
-                        { 
-                            Dispose(); 
-                            Disconnected?.Invoke();
-                            Thread.Sleep(3000);
+                        try
+                        {
+                            RES res = await RecvAsync(cts.Token);
+                            MessageReceived?.Invoke(res);
                         }
-                        log.Debug(e);
+                        catch (Exception e)
+                        {
+                            if (e is SocketException || e is IOException)
+                            {
+                                log.Error(e);
+                                CloseConnection();
+                                Disconnected?.Invoke();
+                                await Task.Delay(RetryInterval);
+                            }
+                            
+                        }
                     }
-                }
-            });
-            this.recvThread.Start();
-        }
-
-        public void Stop()
-        {
-            this.cts.Cancel();
-            this.Dispose();
-        }
+                });
+                this.recvThread.Start();
+            } 
+        } 
 
     }
 

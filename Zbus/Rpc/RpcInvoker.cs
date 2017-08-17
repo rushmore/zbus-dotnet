@@ -41,7 +41,7 @@ namespace Zbus.Rpc
             msg.Cmd = Protocol.PRODUCE;
             msg.Ack = false;
             msg.Token = Token; 
-            return await producer.ProduceAsync(msg, token, selector); 
+            return await producer.PublishAsync(msg, token, selector); 
         }  
 
         private ServerSelector GetSelector(ServerSelector selector = null)

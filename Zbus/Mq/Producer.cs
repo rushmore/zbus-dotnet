@@ -46,7 +46,7 @@ namespace Zbus.Mq
             };
         } 
 
-        public async Task<Message> ProduceAsync(Message msg, CancellationToken? token = null, ServerSelector selector = null)
+        public async Task<Message> PublishAsync(Message msg, CancellationToken? token = null, ServerSelector selector = null)
         {
             msg.Cmd = Protocol.PRODUCE; 
             if(msg.Token == null)

@@ -33,20 +33,12 @@ namespace Api.Example
             throw new NotImplementedException();
         }
 
-        public Task<string> GetStringAsync()
+        public Task<string> getString(string req)
         {
             return Task.Run(() =>
             {
                 Thread.Sleep(100);
                 return "Sleep(100)";
-            });
-        }
-
-        public Task<int> PlusAsync(int a, int b)
-        {
-            return Task.Run(() =>
-            {
-                return a + b;
             });
         } 
     }

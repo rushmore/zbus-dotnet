@@ -15,6 +15,7 @@ namespace Zbus.Mq
         private static readonly ILog log = LogManager.GetLogger(typeof(Broker));
 
         public int? ClientPoolSize { get; set; }
+        public int ReadyTimeout { get; set; }
         public string DefaultSslCertFile { get; set; } 
         public event Action<MqClientPool> ServerJoin;
         public event Action<ServerAddress> ServerLeave;
@@ -25,21 +26,38 @@ namespace Zbus.Mq
 
         private IDictionary<string, string> sslCertFileTable = new ConcurrentDictionary<string, string>();
 
+        private CountdownEvent readyEvent = new CountdownEvent(1);
         public Broker(string trackerServerList=null, int clientPoolSize=32)
         {
+            ReadyTimeout = 3000; //3s
             RouteTable = new BrokerRouteTable();
             PoolTable = new ConcurrentDictionary<ServerAddress, MqClientPool>();
             ClientPoolSize = clientPoolSize;
+            int count = 0;
             if(trackerServerList != null)
             {
                 string[] bb = trackerServerList.Split(new char[] { ';', ',', ' ' });
                 foreach(string trackerAddress in bb)
                 {
+                    if (trackerAddress == "") continue;
                     AddTracker(trackerAddress);
+                    count++;
                 }
             }
+            if (count > 0)
+            {
+                WaitReady();
+            }
+            
         }
 
+        public void WaitReady()
+        {
+            if (!readyEvent.IsSet)
+            {
+                readyEvent.Wait(ReadyTimeout);
+            }
+        } 
 
         public MqClientPool[] Select(ServerSelector selector, Message msg)
         {
@@ -66,12 +84,11 @@ namespace Zbus.Mq
             return res.Where<MqClientPool>(e => e != null).ToArray<MqClientPool>(); 
         }
 
-        public void AddTracker(ServerAddress trackerAddress, string certFile = null, int waitTime=3000)
+        public void AddTracker(ServerAddress trackerAddress, string certFile = null)
         {
             MqClient client = new MqClient(trackerAddress, certFile);
-            trackerSubscribers[trackerAddress] = client;
-            CountdownEvent countDown = new CountdownEvent(1);
-            bool firstTime = true;
+            trackerSubscribers[trackerAddress] = client; 
+            ServerAddress remoteTrackerAddress = trackerAddress;
             client.Connected += async () =>
             {
                 Message msg = new Message
@@ -79,6 +96,14 @@ namespace Zbus.Mq
                     Cmd = Protocol.TRACK_SUB,
                 };
                 await client.SendAsync(msg);
+            };
+            client.Disconnected += () =>
+            {
+                IList<ServerAddress> toRemove = RouteTable.RemoveTracker(remoteTrackerAddress); 
+                foreach (ServerAddress serverAddress in toRemove)
+                {
+                    RemoveServer(serverAddress);
+                }
             };
             client.MessageReceived += (msg) =>
             { 
@@ -89,6 +114,7 @@ namespace Zbus.Mq
                 }
                 TrackerInfo trackerInfo = JsonKit.DeserializeObject<TrackerInfo>(msg.BodyString);
 
+                remoteTrackerAddress = trackerInfo.ServerAddress;
                 IList<ServerAddress> toRemove = RouteTable.UpdateTracker(trackerInfo);
                 foreach(ServerInfo serverInfo in RouteTable.ServerTable.Values)
                 {
@@ -98,15 +124,9 @@ namespace Zbus.Mq
                 {
                     RemoveServer(serverAddress);
                 }
-                if (firstTime)
-                {
-                    countDown.Signal();
-                    firstTime = false;
-                } 
+                readyEvent.Signal();
             };
             client.Start(); 
-            countDown.Wait(waitTime);
-            countDown.Dispose();
         }
         public void AddTracker(string trackerAddress, string certFile = null)
         {
@@ -168,6 +188,7 @@ namespace Zbus.Mq
                 kv.Value.Dispose();
             }
             PoolTable.Clear();
+            readyEvent.Dispose();
         }
     }
 }

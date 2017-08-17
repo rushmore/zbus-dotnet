@@ -22,8 +22,7 @@ namespace Api.Example
         void throwException();
 
 
-        Task<string> GetStringAsync();
+        Task<string> getString(string req); //GetStringAsync => getString for inter-language purpose only
 
-        Task<int> PlusAsync(int a, int b);
     }
 }

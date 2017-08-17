@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package >
+  <metadata>
+    <id>Zbus</id>
+    <version>0.8.3</version>
+    <title>zbus .net client</title>
+    <authors>rushmore</authors>
+    <owners>rushmore</owners>
+    <licenseUrl>https://gitee.com/rushmore/zbus-dotnet/blob/master/LICENSE</licenseUrl>
+    <projectUrl>https://gitee.com/rushmore/zbus-dotnet</projectUrl> 
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <description>zbus .net client, </description>
+    <releaseNotes>Hearbeat enabled</releaseNotes>
+    <copyright>Copyright 2017</copyright>
+    <tags>MQ RPC</tags>
+  </metadata>
+</package>
