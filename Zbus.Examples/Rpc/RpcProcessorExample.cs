@@ -17,6 +17,7 @@ namespace Zbus.Examples
             //Broker broker = new Broker("localhost:15555;localhost15556"); //Capable of HA failover, test it! 
 
             Consumer c = new Consumer(broker, "MyRpc");
+            c.TopicMask = Protocol.MASK_MEMORY | Protocol.MASK_RPC;
             c.ConnectionCount = 4; 
             c.MessageHandler = p.MessageHandler; //Set processor as message handler
             c.Start();

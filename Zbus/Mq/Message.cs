@@ -207,6 +207,12 @@ namespace Zbus.Mq
             set { SetHeader(Protocol.TOKEN, value); }
         }
 
+        public string Tag
+        {
+            get { return GetHeader(Protocol.TAG); }
+            set { SetHeader(Protocol.TAG, value); }
+        }
+
         public string Sender
         {
             get { return GetHeader(Protocol.SENDER); }

@@ -59,11 +59,12 @@ namespace Zbus.Mq
         //Security 
         public static readonly string TOKEN = "token";
 
-
-        public static readonly int MASK_PAUSE = 1 << 0;
+        public static readonly int MASK_MEMORY = 1 << 0;
         public static readonly int MASK_RPC = 1 << 1;
-        public static readonly int MASK_EXCLUSIVE = 1 << 2;
-        public static readonly int MASK_DELETE_ON_EXIT = 1 << 3;
+        public static readonly int MASK_PROXY = 1 << 2;
+        public static readonly int MASK_PAUSE = 1 << 3;
+        public static readonly int MASK_EXCLUSIVE = 1 << 4;
+        public static readonly int MASK_DELETE_ON_EXIT = 1 << 5;
 
         public static readonly string HEARTBEAT = "heartbeat";
     } 

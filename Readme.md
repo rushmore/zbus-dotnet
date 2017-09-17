@@ -17,7 +17,7 @@ zbus carefully designed on its protocol and components to embrace KISS(Keep It S
 - Working as MQ, compare it to RabbitMQ, ActiveMQ.
 - Working as RPC, compare it to many more.
 
-Start zbus, please refer to [https://github.com/rushmore/zbus](https://github.com/rushmore/zbus) 
+Start zbus, please refer to [https://gitee.com/rushmore/zbus](https://gitee.com/rushmore/zbus) 
 
 zbus's .NET client provides friendly and very easy API for .NET platform.
 

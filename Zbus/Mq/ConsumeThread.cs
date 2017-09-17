@@ -22,6 +22,7 @@ namespace Zbus.Mq
         public int? ConsumeWindow { get; set; } 
 
         public string Topic { get; private set; }
+        public int? TopicMask { get; set; }
         public string Token { get; set; }
         public ConsumeGroup ConsumeGroup { get; private set; } 
          
@@ -45,6 +46,7 @@ namespace Zbus.Mq
             if (res == null) return res;
             if(res.Status == 404)
             {
+                await client.DeclareTopicAsync(Topic, TopicMask, token);
                 await client.DeclareGroupAsync(Topic, ConsumeGroup, token);
                 return await TakeAsync(client, token);
             }

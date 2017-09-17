@@ -16,6 +16,7 @@ namespace Zbus.Mq
         public Action<Message, MqClient> MessageHandler;
         public int? ConnectionCount { get; set; }
         public string Topic { get; private set; }
+        public int? TopicMask { get; set; }
         public ConsumeGroup ConsumeGroup { get; set; }
 
         private IDictionary<ServerAddress, ConsumeThread> consumeThreadTable;
@@ -42,6 +43,7 @@ namespace Zbus.Mq
                     return pool.Create();
                 },  
             };
+            thread.TopicMask = this.TopicMask;
             thread.ConnectionCount = ConnectionCount.HasValue? ConnectionCount.Value : 1; 
             thread.MessageRecevied += (msg, client) =>  MessageHandler?.Invoke(msg, client); 
 
