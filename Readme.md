@@ -54,7 +54,7 @@ Only demos the gist of API, more configurable usage calls for your further inter
     const string channel = "MyChannel";
     client.OnOpen += async (c) =>
     {
-        //创建MQ
+        //Create MQ
         Message data = new Message();
         data.Headers["cmd"] = "create";
         data.Headers["mq"] =  mq;
@@ -63,7 +63,7 @@ Only demos the gist of API, more configurable usage calls for your further inter
         var res = await client.InvokeAsync(data);
         Console.WriteLine(JsonKit.SerializeObject(res));
 
-        //发送订阅命令
+        //Subscribe on MQ/Channel
         data = new Message();
         data.Headers["cmd"] = "sub";
         data.Headers["mq"] = mq;
