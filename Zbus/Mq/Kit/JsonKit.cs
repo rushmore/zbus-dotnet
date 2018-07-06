@@ -1,8 +1,9 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using System;
+using System.Collections.Generic;
 
-namespace Zbus.Mq
+namespace zbus
 {
 
     public static class JsonKit
@@ -34,8 +35,41 @@ namespace Zbus.Mq
 
             if (raw.GetType().IsAssignableFrom(type)) return raw;
 
-            string jsonRaw = JsonConvert.SerializeObject(raw);
+            string jsonRaw;
+            if (raw is string)
+            {
+                jsonRaw = (string)raw;
+            }
+            else
+            {
+                jsonRaw = JsonConvert.SerializeObject(raw);
+            }
+
             return JsonConvert.DeserializeObject(jsonRaw, type, JsonSettings);
+        }
+
+        public static T Convert<T>(object raw)
+        {
+            if (raw == null)
+            {
+                return default(T);
+            }
+
+            Type type = typeof(T);
+            if (type == typeof(void)) return default(T);
+
+            if (raw.GetType().IsAssignableFrom(type)) return (T)raw;
+
+            string jsonRaw;
+            if (raw is string)
+            {
+                jsonRaw = (string)raw;
+            }
+            else
+            {
+                jsonRaw = JsonConvert.SerializeObject(raw);
+            }
+            return JsonConvert.DeserializeObject<T>(jsonRaw, JsonSettings);
         }
     }
 }

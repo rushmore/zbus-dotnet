@@ -2,7 +2,7 @@
 <package >
   <metadata>
     <id>Zbus</id>
-    <version>0.8.3</version>
+    <version>1.0.3</version>
     <title>zbus .net client</title>
     <authors>rushmore</authors>
     <owners>rushmore</owners>
@@ -10,8 +10,8 @@
     <projectUrl>https://gitee.com/rushmore/zbus-dotnet</projectUrl> 
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
     <description>zbus .net client, </description>
-    <releaseNotes>Hearbeat enabled</releaseNotes>
-    <copyright>Copyright 2017</copyright>
+    <releaseNotes>RPC made MQ incognito</releaseNotes>
+    <copyright>Copyright 2018</copyright>
     <tags>MQ RPC</tags>
   </metadata>
 </package>

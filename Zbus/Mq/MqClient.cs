@@ -1,214 +1,90 @@
-﻿using System;
-using System.Threading;
-using System.Threading.Tasks;
-using Zbus.Mq.Net;
+﻿using log4net;
+using System;
+using System.Collections.Generic;
 
-namespace Zbus.Mq
+namespace zbus
 {
-   
-    public class MqClient : MessageClient
+    public class MqClient : WebsocketClient
     {
-        public string Token { get; set; } 
-        public MqClient(string serverAddress)
-            : base(serverAddress)
+        private static readonly ILog logger = LogManager.GetLogger(typeof(MqClient));
+
+        private IList<MqHandler> handlers = new List<MqHandler>();
+        public MqClient(string address) : base(address)
         {
-        }
-        public MqClient(ServerAddress serverAddress, string certFile = null)
-            : base(serverAddress, certFile)
-        {
+            this.heartbeatMessage = new Message();
+            this.heartbeatMessage.Headers[Protocol.CMD] = Protocol.PING; 
+
+            OnMessage += async (msg) =>{
+                string mq = (string)msg.Headers[Protocol.MQ];
+                string channel = (string)msg.Headers[Protocol.CHANNEL];
+                if(mq == null || channel == null)
+                {
+                    logger.Warn("Missing mq or channel in response: " + JsonKit.SerializeObject(msg));
+                    return;
+                }
+                MqHandler mqHandler = null;
+                foreach(var e in this.handlers)
+                {
+                    if(e.Mq == mq && e.Channel == channel)
+                    {
+                        mqHandler = e;
+                        break;
+                    }
+                }
+                if(mqHandler == null)
+                {
+                    logger.Warn(string.Format("Missing handler for mq={}, channel={}", mq, channel));
+                    return;
+                }
+                mqHandler.Handler(msg);
+
+                string windowStr = (string)msg.Headers[Protocol.WINDOW];
+                int? window = null;
+                if (windowStr != null) window = int.Parse(windowStr);
+                if(window != null && window <= mqHandler.Window / 2)
+                {
+                    var sub = new Message();
+                    sub.Headers[Protocol.CMD] = Protocol.SUB;
+                    sub.Headers[Protocol.MQ] = mq;
+                    sub.Headers[Protocol.CHANNEL] = channel;
+                    sub.Headers[Protocol.ACK] = false;
+                    sub.Headers[Protocol.WINDOW] = mqHandler.Window.ToString();
+
+                    await this.SendAsync(sub);
+                }  
+            };
         } 
 
-        public async Task ProduceAsync(Message msg, CancellationToken? token = null)
+        public void AddMqHandler(string mq, string channel, Action<Message> handler, int window=1)
         {
-            msg.Cmd = Protocol.PRODUCE;
-            await CheckedInvokeAsync(msg, token);
-        }
-
-        public async Task RouteAsync(Message msg, CancellationToken? token = null)
-        {
-            msg.Cmd = Protocol.ROUTE;
-            if(msg.Status != null)
+            foreach (var e in this.handlers)
             {
-                msg.OriginStatus = msg.Status;
-                msg.Status = null; 
+                if (e.Mq == mq && e.Channel == channel)
+                {
+                    e.Handler = handler;
+                    e.Window = window;
+                    return;
+                }
             }
-            await SendAsync(msg, token);
-        }
 
-        public async Task<Message> ConsumeAsync(string topic, string group = null, int? window=null, CancellationToken? token = null)
-        {
-            Message msg = new Message
+            var mqHandler = new MqHandler
             {
-                Cmd = Protocol.CONSUME,
-                Topic = topic,
-                ConsumeGroup = group,
-                ConsumeWindow = window,
-                Token = Token,
+                Mq = mq,
+                Channel = channel,
+                Window = window,
+                Handler = handler
             };
-            return await InvokeAsync(msg, token); 
+            this.handlers.Add(mqHandler);
         }
 
-
-        public async Task<ServerInfo> QueryServerAsync(CancellationToken? token = null)
+        public class MqHandler
         {
-            Message msg = new Message
-            {
-                Cmd = Protocol.QUERY,
-            }; 
-            return await InvokeObjectAsync<ServerInfo>(msg, token);
-        }
-
-        public async Task<TopicInfo> QueryTopicAsync(string topic, CancellationToken? token = null)
-        {
-            Message msg = new Message
-            {
-                Cmd = Protocol.QUERY,
-                Topic = topic,
-            };
-            return await InvokeObjectAsync<TopicInfo>(msg, token);
-        }
-
-        public async Task<ConsumeGroupInfo> QueryGroupAsync(string topic, string group, CancellationToken? token = null)
-        {
-            Message msg = new Message
-            {
-                Cmd = Protocol.QUERY,
-                Topic = topic,
-                ConsumeGroup = group,
-           
-            };
-            return await InvokeObjectAsync<ConsumeGroupInfo>(msg, token);
-        }
-
-        public async Task<TopicInfo> DeclareTopicAsync(string topic, int? topicMask =null, CancellationToken? token = null)
-        {
-            Message msg = new Message
-            {
-                Cmd = Protocol.DECLARE,
-                Topic = topic, 
-                TopicMask = topicMask,
-            };
-            return await InvokeObjectAsync<TopicInfo>(msg, token);
-        }
-
-        public async Task<ConsumeGroupInfo> DeclareGroupAsync(string topic, string group, CancellationToken? token = null)
-        {
-            return await DeclareGroupAsync(topic, new ConsumeGroup(group), token);
-        }
-
-        public async Task<ConsumeGroupInfo> DeclareGroupAsync(string topic, ConsumeGroup group, CancellationToken? token = null)
-        {
-            Message msg = new Message
-            {
-                Cmd = Protocol.DECLARE,
-                Topic = topic,
-                ConsumeGroup = group.GroupName,
-                GroupFilter = group.Filter,
-                GroupMask = group.Mask,
-                GroupStartCopy = group.StartCopy,
-                GroupStartMsgid = group.StartMsgId,
-                GroupStartOffset = group.StartOffset,
-                GroupStartTime = group.StartTime,
-            };
-            return await InvokeObjectAsync<ConsumeGroupInfo>(msg, token);
-        }
-
-        public async Task RemoveTopicAsync(string topic, CancellationToken? token = null)
-        {
-            Message msg = new Message
-            {
-                Cmd = Protocol.REMOVE,
-                Topic = topic,
-            };
-            await CheckedInvokeAsync(msg, token);
-        }
-
-        public async Task RemoveGroupAsync(string topic, string group, CancellationToken? token = null)
-        {
-            Message msg = new Message
-            {
-                Cmd = Protocol.REMOVE,
-                Topic = topic,
-                ConsumeGroup = group,
-            };
-            await CheckedInvokeAsync(msg, token);
-        }
-
-        public async Task EmptyTopicAsync(string topic, CancellationToken? token = null)
-        {
-            Message msg = new Message
-            {
-                Cmd = Protocol.EMPTY,
-                Topic = topic,
-            };
-            await CheckedInvokeAsync(msg, token);
-        }
-
-        public async Task EmptyGroupAsync(string topic, string group, CancellationToken? token = null)
-        {
-            Message msg = new Message
-            {
-                Cmd = Protocol.EMPTY,
-                Topic = topic,
-                ConsumeGroup = group,
-            };
-            await CheckedInvokeAsync(msg, token);
-        }
-
-        public async Task<T> InvokeObjectAsync<T>(Message msg, CancellationToken? token = null) where T : ErrorInfo, new()
-        {
-            msg.Token = this.Token;
-            if (token == null)
-            {
-                token = CancellationToken.None;
-            }
-            Message res = await this.InvokeAsync(msg, token.Value);
-            if (res.Status != 200)
-            {
-                T info = new T();
-                info.Error = res.BodyString;
-                return info;
-            }
-            return JsonKit.DeserializeObject<T>(res.BodyString);
-        }
-
-        public async Task CheckedInvokeAsync(Message msg, CancellationToken? token = null)
-        {
-            msg.Token = this.Token;
-            if (token == null)
-            {
-                token = CancellationToken.None;
-            }
-            Message res = await this.InvokeAsync(msg, token.Value);
-            if (res.Status != 200)
-            {
-                throw new MqException(res.BodyString);
-            }
+            public string Mq { get; set; }
+            public string Channel { get; set; }
+            public int Window { get; set; } = 1;
+            public Action<Message> Handler { get; set; }
         }
     }
 
-    public class MqClientPool : Pool<MqClient>
-    { 
-        public ServerAddress ServerAddress { get; private set; } 
-        private readonly string certFile; 
-        public MqClientPool(string serverAddress) 
-            : this(new ServerAddress(serverAddress))
-        { 
 
-        }
-        public MqClientPool(ServerAddress serverAddress, string certFile = null)
-        {
-            this.ServerAddress = serverAddress;
-            this.certFile = certFile;
-
-            ObjectActive = client =>
-            {
-                return client.Active;
-            };
-            ObjectFactory = () =>
-            {
-                return new MqClient(this.ServerAddress, this.certFile);
-            }; 
-        }    
-    }
 }

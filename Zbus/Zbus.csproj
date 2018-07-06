@@ -7,9 +7,9 @@
     <ProjectGuid>{06799F8A-6BD4-4F50-BB30-2893F057E07D}</ProjectGuid>
     <OutputType>Library</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Zbus</RootNamespace>
-    <AssemblyName>Zbus</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <RootNamespace>zbus</RootNamespace>
+    <AssemblyName>zbus</AssemblyName>
+    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
     <PublishUrl>publish\</PublishUrl>
@@ -73,31 +73,18 @@
     </Reference>
     <Reference Include="System" />
     <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Web" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Mq\BrokerRouteTable.cs" />
-    <Compile Include="Mq\Broker.cs" />
-    <Compile Include="Mq\ConsumeGroup.cs" />
-    <Compile Include="Mq\ConsumeThread.cs" />
-    <Compile Include="Mq\MqAdmin.cs" />
+    <Compile Include="Mq\Auth.cs" />
+    <Compile Include="Rpc\RpcClient.cs" />
     <Compile Include="Mq\MqClient.cs" />
-    <Compile Include="Mq\Consumer.cs" />
-    <Compile Include="Mq\Producer.cs" />
+    <Compile Include="Mq\WebsocketClient.cs" />
     <Compile Include="Mq\Protocol.cs" />
-    <Compile Include="Mq\Message.cs" />
-    <Compile Include="Mq\Net\MessageClient.cs" />
-    <Compile Include="Mq\Net\Pool.cs" />
-    <Compile Include="Mq\Net\ICodec.cs" />
-    <Compile Include="Mq\Net\Client.cs" />
     <Compile Include="Mq\Kit\JsonKit.cs" />
-    <Compile Include="Mq\MqException.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Rpc\Request.cs" />
-    <Compile Include="Rpc\Response.cs" />
-    <Compile Include="Rpc\RpcInvoker.cs" />
+    <Compile Include="Rpc\RpcServer.cs" />
     <Compile Include="Rpc\RpcProcessor.cs" />
-    <Compile Include="Rpc\RpcException.cs" />
-    <Compile Include="Rpc\RpcProxy.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

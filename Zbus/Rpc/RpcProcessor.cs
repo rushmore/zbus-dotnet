@@ -3,10 +3,35 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using Zbus.Mq;
-namespace Zbus.Rpc
+namespace zbus
 {
+
+    public class PathKit
+    {
+        public static string Join(params string[] paths)
+        {
+            string p = "";
+            foreach(string path in paths)
+            {
+                p += "/" + path;
+            }
+            Regex rgx = new Regex("[/]+");
+            string result = rgx.Replace(p, "/");
+            if(result.Length > 1 && result.EndsWith("/"))
+            {
+                result = result.Substring(0, result.Length - 1);
+            }
+            return result;
+        }
+    }
+
+    public class UrlEntry
+    {
+        public string Url { get; set; }
+        public string Mq { get; set; }
+    }
 
     public class RpcProcessor
     {
@@ -14,54 +39,16 @@ namespace Zbus.Rpc
 
         public Encoding Encoding { get; set; } = Encoding.UTF8;
 
-        private Dictionary<string, MethodInstance> methods = new Dictionary<string, MethodInstance>();
+        public string UrlPrefix { get; set; } = "";
 
-        public void AddModule<T>(string module = null)
-        {
-            Type type = typeof(T);
-            object instance = Activator.CreateInstance(type);
-            if (module == null)
-            {
-                AddModule(instance);
-            }
-            else
-            {
-                AddModule(module, instance);
-            }
-        }
+        public string DocUrlPrefix { get; set; } = "doc";
 
-        public void AddModule<T>()
-        {
-            AddModule(typeof(T)); 
-        }
+        public bool DocEnabled { get; set; } = true;
 
-        public void AddModule(Type t)
-        { 
-            object instance = t.GetConstructors()[0].Invoke(new object[0]);
-            AddModule(instance);
-        }
+        public Dictionary<string, MethodInstance> UrlPath2Method { get; } = new Dictionary<string, MethodInstance>();
 
-        public void AddModule(object service)
-        {
-            foreach (Type type in service.GetType().GetInterfaces())
-            {
-                AddModule(type.Name, service);
-                AddModule(type.FullName, service);
-            }
-
-            AddModule("", service);
-            AddModule(service.GetType().Name, service);
-            AddModule(service.GetType().FullName, service);
-        }
-
-        public void AddModule(string module, object service)
-        {
-            BuildMethodTable(methods, module, service); 
-        } 
-
-        private void BuildMethodTable(IDictionary<string, MethodInstance> table, string module, object service)
-        { 
-            IDictionary<string, MethodInstance> ignore = new Dictionary<string, MethodInstance>();
+        public void Mount(string urlPrefix, object service, bool docEnabled = true)
+        {  
             List<Type> types = new List<Type>();
             types.Add(service.GetType());
             foreach (Type type in service.GetType().GetInterfaces())
@@ -71,266 +58,222 @@ namespace Zbus.Rpc
             foreach (Type type in types)
             {
                 foreach (MethodInfo info in type.GetMethods())
-                {
-                    bool exclude = false;
-                    string id = info.Name;
+                {   
                     if (info.DeclaringType != type || !info.IsPublic) continue;
 
+                    string urlPath = PathKit.Join(urlPrefix, info.Name);
+                    bool exclude = false;
+                    string httpMethod = null;
                     foreach (Attribute attr in Attribute.GetCustomAttributes(info))
                     {
-                        if (attr.GetType() == typeof(Remote))
+                        if (attr.GetType() == typeof(RequestMapping))
                         {
-                            Remote r = (Remote)attr;
-                            if (r.Id != null)
+                            RequestMapping r = (RequestMapping)attr;
+                            if (r.Path != null)
                             {
-                                id = r.Id;
+                                urlPath = PathKit.Join(urlPrefix, r.Path);
                             }
                             if (r.Exclude)
                             {
                                 exclude = true;
                             }
+                            if(r.Method != null)
+                            {
+                                httpMethod = r.Method;
+                            }
+
                             break;
                         }
                     }
+                    if (exclude) continue;
                     ParameterInfo[] paramInfo = info.GetParameters();
                     Type[] paramTypes = new Type[paramInfo.Length];
                     for(int i = 0; i < paramTypes.Length; i++)
                     {
                         paramTypes[i] = paramInfo[i].ParameterType;
-                    }
-                    IList<string> keys = Keys(module, id, paramTypes);
-
+                    }  
                     MethodInstance instance = new MethodInstance(info, service);
-                    foreach(string key in keys)
-                    {
-                        table[key] = instance;
-                    } 
-                    if (exclude)
-                    {
-                        foreach (string key in keys)
-                        {
-                            ignore[key] = instance;
-                        }
-                    } 
+                    instance.HttpMethod = httpMethod;
+                    instance.DocEnabled = docEnabled;
+                    UrlPath2Method[urlPath] = instance; 
                 }
-            }
-            foreach (string key in ignore.Keys)
-            {
-                table.Remove(key);
             } 
+
         } 
-        
-         
-        public void MessageHandler(Message msg, MqClient client)
+
+        public void MountDoc()
         {
-            Message msgRes = new Message
-            {
-                Status = 200,
-                Recver = msg.Sender,
-                Id = msg.Id
-            };
+            if (!DocEnabled) return;
+            string urlPath = PathKit.Join(DocUrlPrefix, "/");
+            if (UrlPath2Method.ContainsKey(urlPath)) return;
 
-            Response response = null;
-            try
-            {
-                string encodingName = msg.Encoding;
-                Encoding encoding = this.Encoding;
-                if (encodingName != null)
-                {
-                    encoding = Encoding.GetEncoding(encodingName);
-                }
+            this.Mount(DocUrlPrefix, new RpcInfo(this), false);
+        }
+        
+        public List<UrlEntry> UrlEntryList(string mq)
+        {
+            List<UrlEntry> res = new List<UrlEntry>();
 
-                Request request = JsonKit.DeserializeObject<Request>(msg.GetBody(encoding));
-                response = ProcessAsync(request).Result;
-            }
-            catch (Exception e)
+            foreach (var kv in UrlPath2Method)
             {
-                response = new Response
+                string urlPath = kv.Key; 
+                var e = new UrlEntry
                 {
-                    Error = e
+                    Url = PathKit.Join(UrlPrefix, urlPath),
+                    Mq = mq
                 };
+                res.Add(e);
             }
-             
-            try
-            {
-                msgRes.SetJsonBody(JsonKit.SerializeObject(response), this.Encoding); 
-                Task task = client.RouteAsync(msgRes);
-            }
-            catch (Exception e)
-            {
-                log.Error(e);
-            }
+            return res; 
         }
 
-        public async Task<Response> ProcessAsync(Request request)
+        private void reply(Message response, int status, string message)
         {
-            Response response = new Response();
-            string module = request.Module == null ? "" : request.Module;
-            string method = request.Method;
-            object[] args = request.Params;
+            response.Status = status;
+            response.Headers["content-type"] = "text/plain; charset=utf8";
+            response.Body = message;
+        }
 
-            MethodInstance target = null;
-            if (request.Method == null)
+        private object[] parseParam(string url)
+        {
+            List<object> args = new List<object>();
+            int idx = url.IndexOf("?");
+            string path = url;
+            string argsStr = null;
+            if(idx >= 0)
             {
-                response.Error = new RpcException("missing method name");
-                return response;
+                path = url.Substring(0, idx);
+                argsStr = url.Substring(idx + 1);
             }
+            string[] bb = path.Split('/');
+            foreach(string b in bb)
+            {
+                if (b.Length == 0) continue;
+                args.Add(b);
+            }
+            if(argsStr != null)
+            {
+                IDictionary<string, string> dict = new Dictionary<string, string>();
+                bb = argsStr.Split('&');
+                foreach(string b in bb)
+                {
+                    if(b.Length == 0) continue;
+                    string[] kv = b.Split('=');
+                    if (kv.Length != 2) continue;
+                    dict[kv[0].Trim()] = dict[kv[1].Trim()];
+                }
+                if(dict.Count > 0)
+                {
+                    args.Add(dict);
+                }
+            }
+            return args.ToArray(); 
+        }
 
-            target = FindMethod(module, method, args);
+        private bool checkParams(Message req, Message res, MethodInfo method, object[] args, object[] invokeArgs)
+        {
+            ParameterInfo[] pinfo = method.GetParameters();
+            int count = 0;
+            foreach (ParameterInfo info in pinfo)
+            {
+                if (typeof(Message).IsAssignableFrom(info.ParameterType))
+                {
+                    continue;
+                }
+                count++;
+            }
+            if(count != args.Length)
+            {
+                reply(res, 400, string.Format("Request(Url={0}, Method={1}, Params={2}) Bad Format", req.Url, method.Name, JsonKit.SerializeObject(args)));
+                return false;
+            }
+            int j = 0;
+            for (int i = 0; i < pinfo.Length; i++)
+            {
+                if (typeof(Message).IsAssignableFrom(pinfo[i].ParameterType))
+                {
+                    invokeArgs[i] = req;
+                    continue;
+                }
+                invokeArgs[i] = JsonKit.Convert(args[j++], pinfo[i].ParameterType);  
+            } 
+
+            return true;
+        }
+
+        public async Task ProcessAsync(Message request, Message response)
+        {
+            response.Status = 200;
+            if(request.Url == null)
+            {
+                reply(response, 400, "Missing url in request");
+                return;
+            }
+            string url = request.Url;
+            int length = 0;
+            MethodInstance target = null;
+            string targetPath = null;
+            foreach(var e in this.UrlPath2Method)
+            {
+                string path = e.Key;
+                if (url.StartsWith(path))
+                {
+                    if(path.Length > length)
+                    {
+                        target = e.Value;
+                        targetPath = path;
+                        length = path.Length;
+                    }
+                }
+            }
             if (target == null)
             {
-                string errorMsg = method + " not found";
-                if (module != "")
+                reply(response, 404, string.Format("Url={0} Not Found", url));
+                return;
+            }
+            object[] args = new object[0];
+            if(request.Body != null)
+            {
+                args = JsonKit.Convert<object[]>(request.Body);
+            }
+            else
+            {
+                args = parseParam(url.Substring(targetPath.Length));
+            } 
+             
+            ParameterInfo[] pinfo = target.Method.GetParameters();  
+            object[] invokeArgs = new object[pinfo.Length];
+            bool ok = checkParams(request, response, target.Method, args, invokeArgs);
+            if (!ok) return;
+
+            dynamic invoked = target.Method.Invoke(target.Instance, invokeArgs);
+            if (invoked != null && typeof(Task).IsAssignableFrom(invoked.GetType()))
+            {
+                if (target.Method.ReturnType.GenericTypeArguments.Length > 0)
                 {
-                    errorMsg = module + ":" + errorMsg;
-                }
-                response.Error = new RpcException(errorMsg);
-                return response;
+                    invoked = await invoked;
+                } 
+            }
+
+            if(invoked is Message)
+            {
+                response.Replace((Message)invoked);
+            }
+            else
+            {
+                response.Body = invoked;
+                response.Headers["content-type"] = "application/json; charset=utf8;";
             } 
 
-            try
-            {
-                ParameterInfo[] pinfo = target.Method.GetParameters();
-                if (pinfo.Length != args.Length)
-                {
-                    response.Error = new RpcException("number of argument not match");
-                    return response;
-                }
-                for (int i = 0; i < pinfo.Length; i++)
-                {
-                    if (args[i].GetType() != pinfo[i].ParameterType)
-                    {
-                        args[i] = JsonKit.Convert(args[i], pinfo[i].ParameterType);
-                    }
-                }
-
-                dynamic invoked = target.Method.Invoke(target.Instance, args);
-                if (invoked != null && typeof(Task).IsAssignableFrom(invoked.GetType()))
-                {
-                    if (target.Method.ReturnType.GenericTypeArguments.Length > 0)
-                    {
-                        response.Result = await invoked;
-                    }
-                    else
-                    {
-                        response.Result = null;
-                    }
-                }
-                else
-                {
-                    response.Result = invoked;
-                }
-                return response;
-            }
-            catch (Exception ex)
-            {
-                response.Error = ex;
-                if (ex.InnerException != null)
-                {
-                    response.Error = ex.InnerException;
-                }
-                return response;
-            }
-        }
-
-        private MethodInstance FindMethod(string module, string method, object[] args)
-        {
-            Type[] types = null;
-            if (args != null)
-            {
-                types = new Type[args.Length];
-                for (int i = 0; i < args.Length; i++)
-                {
-                    types[i] = args[i].GetType();
-                }
-            }
-
-            IList<string> keys = Keys(module, method, types);
-            foreach (string key in keys)
-            {
-                if (this.methods.ContainsKey(key))
-                {
-                    return this.methods[key];
-                }
-            }
-            return null;
         } 
 
-        private IList<string> Keys(string module, string method, Type[] types)
-        {
-            string paramMD5 = null, key;
-            if(types != null)
-            {
-                foreach (Type type in types)
-                {
-                    paramMD5 += type + ",";
-                } 
-            } 
-
-            IList<string> keys = new List<string>();
-            key = module + ":" + method;
-            if (paramMD5 != null)
-            {
-                key += ":" + paramMD5;
-            }
-
-            if (!keys.Contains(key))
-            {
-                keys.Add(key);
-            }
-
-            key = module + ":" + char.ToUpper(method[0]) + method.Substring(1);
-            if (!keys.Contains(key))
-            {
-                keys.Add(key);
-            }
-
-            key = module + ":" + char.ToLower(method[0]) + method.Substring(1);
-            if (!keys.Contains(key))
-            {
-                keys.Add(key);
-            }
-
-            key = module + ":" + char.ToUpper(method[0]) + method.Substring(1);
-            if (paramMD5 != null)
-            {
-                key += ":" + paramMD5;
-            }
-            if (!keys.Contains(key))
-            {
-                keys.Add(key);
-            }
-
-            key = module + ":" + char.ToLower(method[0]) + method.Substring(1);
-            if (paramMD5 != null)
-            {
-                key += ":" + paramMD5;
-            }
-            if (!keys.Contains(key))
-            {
-                keys.Add(key);
-            }
-
-            string async = "Async";
-            if (method.EndsWith(async)) //special for Async method
-            {
-                key = module + ":" + method.Substring(0, method.Length - async.Length);
-                if (paramMD5 != null)
-                {
-                    key += ":" + paramMD5;
-                }
-                if (!keys.Contains(key))
-                {
-                    keys.Add(key);
-                }
-            }
-            return keys;
-        }
-
-        private class MethodInstance
+        public class MethodInstance
         {
             public MethodInfo Method { get; set; }
             public object Instance { get; set; }
+
+            public string HttpMethod { get; set; }
+            public bool DocEnabled { get; set; } = true;
 
             public MethodInstance(MethodInfo method, object instance)
             {
@@ -340,24 +283,142 @@ namespace Zbus.Rpc
         }
     }
 
-    public class Remote : Attribute
+    public class RequestMapping : Attribute
     {
-        public string Id { get; set; }
+        public string Path { get; set; }
+        public string Method { get; set; }
         public bool Exclude { get; set; }
 
-        public Remote()
+        public RequestMapping(string path=null, string method=null, bool exclude=false)
         {
-            Id = null;
-        }
-
-        public Remote(string id)
-        {
-            this.Id = id;
-        }
-
-        public Remote(bool exclude)
-        {
-            this.Exclude = exclude;
-        }
+            Path = path;
+            Method = method;
+            Exclude = exclude;
+        } 
     }
+
+
+    public class RpcInfo
+    {
+        private RpcProcessor rpcProcessor; 
+        public RpcInfo(RpcProcessor rpcProcessor)
+        {
+            this.rpcProcessor = rpcProcessor; 
+        }
+
+        [RequestMapping("/")]
+        public Message Index()
+        {
+            Message res = new Message();
+            res.Status = 200;
+            res.Headers["content-type"] = "text/html; charset=utf8"; 
+            res.Body = BuildRpcInfo();
+
+            return res;
+        }
+         
+
+        private string BuildRpcInfo()
+        {
+            string info = ""; 
+            foreach(var kv in rpcProcessor.UrlPath2Method)
+            {
+                string urlPath = kv.Key;
+                var m = kv.Value;
+                if (m.DocEnabled == false) continue;
+
+                string returnType = m.Method.ReturnType.ToString();
+                var args = "";
+                ParameterInfo[] pinfos = m.Method.GetParameters();
+                for (int i = 0; i < pinfos.Length; i++)
+                {
+                    ParameterInfo pinfo = pinfos[i];
+                    args += pinfo.ToString();
+                    if (i < pinfos.Length - 1)
+                    {
+                        args += ", ";
+                    }
+                }
+                var link = PathKit.Join(rpcProcessor.UrlPrefix, urlPath);
+                info += string.Format(RpcMethodTemplate, link, returnType, m.Method.Name, args);
+            }  
+            return string.Format(RpcInfoTemplate, rpcProcessor.UrlPrefix, RpcStyleTemplate, info); 
+        }
+
+
+        public static readonly string RpcInfoTemplate = @"
+<html><head>
+<meta http-equiv=""Content-type"" content=""text/html; charset=utf-8"">
+<title>{0} C#</title>
+{1}
+
+<script>  
+var rpc; 
+function init(){{
+    rpc = new RpcClient(null,'{0}'); 
+}}
+</script> 
+<script async src=""https://unpkg.com/zbus/zbus.min.js"" onload=""init()"">
+</script>   
+
+</head>
+<body>
+<div>
+<div class=""url"">
+    <span>URL={0}/[module]/[method]/[param1]/[param2]/...</span> 
+</div>
+<table class=""table"">
+<thead>
+<tr class=""table-info"">
+    <th class=""urlPath"">URL Path</th>
+    <th class=""returnType"">Return Type</th>
+    <th class=""methodParams"">Method and Params</th> 
+</tr>
+<thead>
+<tbody>
+{2}
+</tbody>
+</table> </div> </body></html>
+";
+
+
+
+        public static readonly string RpcStyleTemplate = @"
+<style type=""text/css"">
+body {
+    font-family: -apple-system,system-ui,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+    font-size: 1rem;
+    font-weight: 400;
+    line-height: 1.5;
+    color: #292b2c;
+    background-color: #fff;
+    margin: 0px;
+    padding: 0px;
+}
+table {  background-color: transparent;  display: table; border-collapse: separate;  border-color: grey; }
+.table { width: 100%; max-width: 100%;  margin-bottom: 1rem; }
+.table th {  height: 30px; }
+.table td, .table th {    border-bottom: 1px solid #eceeef;   text-align: left; padding-left: 16px;}
+th.urlPath {  width: 10%; }
+th.returnType {  width: 10%; }
+th.methodParams {   width: 80%; } 
+td.returnType { text-align: right; }
+thead { display: table-header-group; vertical-align: middle; border-color: inherit;}
+tbody { display: table-row-group; vertical-align: middle; border-color: inherit;}
+tr { display: table-row;  vertical-align: inherit; border-color: inherit; }
+.table-info, .table-info>td, .table-info>th { background-color: #dff0d8; }
+.url { margin: 4px 0; padding-left: 16px;}
+</style>
+";
+
+        public static readonly string RpcMethodTemplate = @"
+<tr>
+    <td class=""urlPath""> <a href=""{0}"">{0}</a>  </td>
+    <td class=""returnType"">{1}</td>
+    <td class=""methodParams"">
+        <code><strong><a href=""{0}"" target=""_blank"">{2}</a></strong>({3})</code>
+    </td> 
+</tr>
+";
+    } 
 }

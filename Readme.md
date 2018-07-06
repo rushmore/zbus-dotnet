@@ -17,7 +17,7 @@ zbus carefully designed on its protocol and components to embrace KISS(Keep It S
 - Working as MQ, compare it to RabbitMQ, ActiveMQ.
 - Working as RPC, compare it to many more.
 
-Start zbus, please refer to [https://gitee.com/rushmore/zbus](https://gitee.com/rushmore/zbus) 
+Start zbus, please refer to [https://github.com/rushmore/zbus](https://github.com/rushmore/zbus) 
 
 zbus's .NET client provides friendly and very easy API for .NET platform.
 
@@ -33,54 +33,135 @@ Only demos the gist of API, more configurable usage calls for your further inter
 
 ### Produce message
 
-    Broker broker = new Broker("localhost:15555");  //Load balance for all tracked servers.
-    Producer p = new Producer(broker);
-    Message msg = new Message
-    {
-        Topic = "hong",
-        BodyString = "From Zbus.NET",
-    };
-    await p.ProduceAsync(msg);
+    using (MqClient client = new MqClient("localhost:15555"))
+    {   
+        var data = new Message();
+        data.Headers["cmd"] = "pub";
+        data.Headers["mq"] = mq;
+        data.Body = "Hello from C#";
+
+        res = await client.InvokeAsync(data);
+        Console.WriteLine(JsonKit.SerializeObject(res));
+    } 
 
 
 
 ### Consume message
 
-    Broker broker = new Broker("localhost:15555"); 
-    Consumer c = new Consumer(broker, "MyTopic");
-    c.MessageHandler += (msg, client) => {
-        Console.WriteLine(msg);
+    MqClient client = new MqClient("localhost:15555");
+
+    const string mq = "MyMQ";
+    const string channel = "MyChannel";
+    client.OnOpen += async (c) =>
+    {
+        //创建MQ
+        Message data = new Message();
+        data.Headers["cmd"] = "create";
+        data.Headers["mq"] =  mq;
+        data.Headers["channel"] = channel;
+            
+        var res = await client.InvokeAsync(data);
+        Console.WriteLine(JsonKit.SerializeObject(res));
+
+        //发送订阅命令
+        data = new Message();
+        data.Headers["cmd"] = "sub";
+        data.Headers["mq"] = mq;
+        data.Headers["channel"] = channel;
+
+        res = await client.InvokeAsync(data);
+        Console.WriteLine(JsonKit.SerializeObject(res));
     };
-    c.Start();
+
+    client.AddMqHandler(mq, channel, (msg) =>
+    {
+        Console.WriteLine(JsonKit.SerializeObject(msg));
+    });
+
+    client.ConnectAsync().Wait();
 
 ### RPC client
 
-    using (Broker broker = new Broker("localhost:15555"))
-    {
-        RpcInvoker rpc = new RpcInvoker(broker, "MyRpc"); 
-        //Way 1) Raw invocation
-        var res = rpc.InvokeAsync<int>("plus", 1, 2).Result;
-        Console.WriteLine(res);
+    using (RpcClient rpc = new RpcClient("localhost:15555", "MyRpc"))
+    { 
+        string module = "";   
+        //dynamic
+        IService svc = rpc.CreateProxy<IService>(module);
+        int c = svc.plus(1, 2);
+        Console.WriteLine(c);
 
-        //Way 2) Dynamic Object
-        dynamic rpc2 = rpc;                          //RpcInvoker is also a dynamic object
-        var res2 = rpc2.plus(1, 2);                  //Magic!!! just like javascript
-        Console.WriteLine(res2);
+        string str = await svc.getString("hong"); //support remote await!
+        Console.WriteLine(str);
 
-        //Way 3) Strong typed class proxy
-        IService svc = rpc.CreateProxy<IService>();  //Create a proxy class, strongly invocation
-
-        var res3 = svc.plus(1, 2);
-        Console.WriteLine(res3);
-    }
+        //Raw API
+        int res = await rpc.InvokeAsync<int>("plus", new object[] { 1, 2 }, module: module);
+        Console.WriteLine(JsonKit.SerializeObject(res)); 
+    } 
 
 ### RPC service
 
-    RpcProcessor p = new RpcProcessor();
-    p.AddModule<MyService>(); //Simple? No requirements on your business object(MyService)!
+    class RpcServerExample
+    {
+        
+        public string echo(string msg)
+        {
+            return msg;
+        }
 
-    Broker broker = new Broker("localhost:15555"); //Capable of HA failover, test it!  
-    Consumer c = new Consumer(broker, "MyRpc");
-    c.ConnectionCount = 4; 
-    c.MessageHandler = p.MessageHandler; //Set processor as message handler
-    c.Start();
+        public string testEncoding()
+        {
+            return "中文";
+        }
+
+        public void noReturn()
+        {
+
+        }
+
+        public int plus(int a, int b)
+        {
+            return a + b;
+        }
+
+        public void throwException()
+        {
+            throw new NotImplementedException();
+        }
+
+        [RequestMapping("/abc")]
+        public Message home()
+        {
+            Message res = new Message();
+            res.Status = 200;
+            res.Headers["content-type"] = "text/html; charset=utf8";
+            res.Body = "<h1>C# body</h1>";
+            return res;
+        }
+
+        public Task<string> getString(string req)
+        {
+            return Task.Run(() =>
+            {
+                return "AsyncTask: " + req;
+            });
+        }
+
+        static void Main(string[] args)
+        {
+            RpcProcessor p = new RpcProcessor();
+            p.UrlPrefix = "";
+            p.Mount("/example", new RpcServerExample());
+
+
+            //RPC via MQ
+            RpcServer server = new RpcServer(p);
+            server.MqServerAddress = "localhost:15555";
+
+            //server.AuthEnabled = true;
+            //server.ApiKey = "2ba912a8-4a8d-49d2-1a22-198fd285cb06";
+            //server.SecretKey = "461277322-943d-4b2f-b9b6-3f860d746ffd";
+
+            server.Mq = "MyRpc"; 
+            server.Start(); 
+        } 
+    }

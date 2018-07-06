@@ -2,10 +2,27 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
-using System.Threading;
-using System.Threading.Tasks; 
-namespace Api.Example
+using System.Threading.Tasks;
+
+namespace zbus.Examples
 {
+    public interface IService
+    {
+        string echo(string msg);
+
+        string testEncoding();
+
+        void noReturn();
+
+        int plus(int a, int b);
+
+        void throwException();
+
+
+        Task<string> getString(string req); //GetStringAsync => getString for inter-language purpose only
+
+    }
+
     public class MyService : IService
     {
         public string echo(string msg)
@@ -16,7 +33,7 @@ namespace Api.Example
         public string testEncoding()
         {
             return "中文";
-        } 
+        }
 
         public void noReturn()
         {
@@ -26,7 +43,7 @@ namespace Api.Example
         public int plus(int a, int b)
         {
             return a + b;
-        } 
+        }
 
         public void throwException()
         {
@@ -37,8 +54,7 @@ namespace Api.Example
         {
             return Task.Run(() =>
             {
-                Thread.Sleep(100);
-                return "Sleep(100)";
+                return "AsyncTask: " + req;
             });
         } 
     }

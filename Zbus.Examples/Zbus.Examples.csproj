@@ -7,11 +7,12 @@
     <ProjectGuid>{2EEF7064-11AE-4DB1-A800-E28F532F2732}</ProjectGuid>
     <OutputType>Exe</OutputType>
     <AppDesignerFolder>Properties</AppDesignerFolder>
-    <RootNamespace>Zbus.Examples</RootNamespace>
-    <AssemblyName>Zbus.Examples</AssemblyName>
-    <TargetFrameworkVersion>v4.5.2</TargetFrameworkVersion>
+    <RootNamespace>zbus.Examples</RootNamespace>
+    <AssemblyName>zbus.Examples</AssemblyName>
+    <TargetFrameworkVersion>v4.6</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <TargetFrameworkProfile />
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -36,13 +37,9 @@
     <WarningLevel>4</WarningLevel>
   </PropertyGroup>
   <PropertyGroup>
-    <StartupObject>Zbus.Examples.RpcProcessorExample</StartupObject>
+    <StartupObject>zbus.Examples.RpcServerExample</StartupObject>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="CommandLine, Version=1.9.71.2, Culture=neutral, PublicKeyToken=de6f01bd326f8c32, processorArchitecture=MSIL">
-      <HintPath>..\packages\CommandLineParser.1.9.71\lib\net45\CommandLine.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="log4net, Version=1.2.15.0, Culture=neutral, PublicKeyToken=669e0ddf0bb1aa2a, processorArchitecture=MSIL">
       <HintPath>..\packages\log4net.2.0.5\lib\net45-full\log4net.dll</HintPath>
       <Private>True</Private>
@@ -55,31 +52,19 @@
     <Reference Include="Microsoft.CSharp" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Internal\MqClientConsumeExample.cs" />
-    <Compile Include="Mq\Simple\ConsumerSimple.cs" />
-    <Compile Include="Mq\Simple\MqAdminSimple.cs" />
-    <Compile Include="Internal\BrokerExample.cs" />
-    <Compile Include="Internal\ConsumeThreadExample.cs" />
-    <Compile Include="Internal\MqClientCancelExample.cs" />
-    <Compile Include="Internal\MqClientStartExample.cs" />
-    <Compile Include="Internal\MqClientExample.cs" />
-    <Compile Include="Mq\ProducerExample.cs" />
-    <Compile Include="Mq\ConsumerExample.cs" />
-    <Compile Include="Mq\Simple\ProducerSimple.cs" />
+    <Compile Include="Example\Rpc\Biz\IService.cs" />
+    <Compile Include="Example\Rpc\RpcClient.cs" />
+    <Compile Include="Example\Rpc\RpcServer.cs" />
+    <Compile Include="Example\Pub.cs" />
+    <Compile Include="Example\Sub.cs" />
+    <Compile Include="Example\Websocket.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Rpc\RpcInvokerExample.cs" />
-    <Compile Include="Rpc\RpcProcessorExample.cs" />
-    <Compile Include="Rpc\Biz\IService.cs" />
-    <Compile Include="Rpc\Biz\MyService.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />
     <None Include="log4net.config">
       <CopyToOutputDirectory>Always</CopyToOutputDirectory>
     </None>
-    <None Include="Mq\Broadcast\Readme.md" />
-    <None Include="Mq\MsgFilter\Readme.md" />
-    <None Include="Mq\Multicast\Readme.md" />
     <None Include="packages.config" />
   </ItemGroup>
   <ItemGroup>
